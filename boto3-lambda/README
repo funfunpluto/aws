@@ -1,0 +1,135 @@
+lauch an EC2 instance
+
+ssh to the EC2 instance, yum update
+yum install -y python3-pip python3 python3-setuptools
+
+pip3 install boto3 --use
+(install boto3 in user directory, to avoid modification of libraries)
+
+python --version
+
+python3 --version
+
+create new security key
+aws configure
+
+aws sts get-caller-identity
+
+List all S3 buckets
+>>> s3 = boto3.resource('s3')
+>>> for bucket in s3.buckets.all():
+...     print(bucket)
+
+Launch an ec2 instance
+ec2 = boto3.client('ec2')
+>>> response = ec2.run_instances(
+...     ImageId = 'ami-02e136e904f3da870',
+...     InstanceType = 't2.micro',
+...     KeyName='plutoec2key',
+...     MinCount=1,
+...     MaxCount=1
+... )
+>>> response
+
+Create a Lambda function to stop ec2 instances during the night
+
+Create a custom role
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": [
+                "logs:CreateLogStream",
+                "logs:CreateLogGroup",
+                "logs:PutLogEvents"
+            ],
+            "Resource": "*"
+        },
+        
+         {
+            "Effect": "Allow",
+            "Action": [
+                "ec2:DescribeInstances",
+                "ec2:StartInstances",
+                "ec2:StopInstances"
+            ],
+            "Resource": "*"
+        }
+
+    ]
+}
+
+Lambda/boto3 function to start or stop EC2 instances by keyName
+import boto3
+
+def lambda_handler(envent,context):
+    
+    ec2_client = boto3.client('ec2')
+    response = ec2_client.describe_instances(Filters = [{'Name': 'key-name', 'Values':['plutoec2key']}])
+    reservations = response.get("Reservations")
+    for res in reservations:
+        for ins in res["Instances"]:
+            instance_id = ins["InstanceId"]
+            respp = ec2_client.start_instances(InstanceIds=[instance_id])
+            print(respp) 
+
+
+ACL to change attribute of an instance
+create an mapping.json file
+[{
+  "DeviceName": "/dev/xvda",
+  "Ebs": {
+    "DeleteOnTermination": false
+  }
+}]
+
+aws ec2 modify_instance-attribute --instance-id XXXXX --block-device-mapping file://mapping.json
+
+Lambda Function to delete a volume
+
+Create a role to grant lambda permission
+{   
+    "Version": "2012-10-17",
+    "Statement": [
+        {   
+            "Effect": "Allow",
+            "Action": [
+                "logs:CreateLogStream",
+                "logs:CreateLogGroup",
+                "logs:PutLogEvents"
+            ],
+            "Resource": "*"
+        },
+         
+         {  
+            "Effect": "Allow",
+            "Action": [
+                "ec2:DeleteVolumes",
+                "ec2:DescribeRegions",
+                "ec2:DescribeVolumes"
+            ],
+            "Resource": "*"
+        }
+    
+    ]
+}
+
+Lambda code
+import boto3
+
+def lambda_handler(object, context):
+	ec2_client = boto3.client("ec2")
+	regions = [region['RegionName'] for region in ec2_client.describe_regions()['Regions']]
+
+	for region in regions:
+		ec2 = boto3.resource('ec2', region_name=region)
+		print('Region:', region)
+
+		volumes = ec2.volumes.filter(Filters =[{'Name': 'status, 'Values': ['available]}])
+
+		for volume in volumes:
+			v = ec2.Volume(volume.id)
+			print("Deleteing EBS volume: {}, Size: {} Gib".format(v.id, v.size))
+			v.delete()
+	
