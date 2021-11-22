@@ -25,7 +25,7 @@ ec2 = boto3.client('ec2')
 >>> response = ec2.run_instances(
 ...     ImageId = 'ami-02e136e904f3da870',
 ...     InstanceType = 't2.micro',
-...     KeyName='plutoec2key',
+...     KeyName='pluto-key-name',
 ...     MinCount=1,
 ...     MaxCount=1
 ... )
@@ -66,7 +66,7 @@ import boto3
 def lambda_handler(envent,context):
     
     ec2_client = boto3.client('ec2')
-    response = ec2_client.describe_instances(Filters = [{'Name': 'key-name', 'Values':['plutoec2key']}])
+    response = ec2_client.describe_instances(Filters = [{'Name': 'key-name', 'Values':['pluto-key-name']}])
     reservations = response.get("Reservations")
     for res in reservations:
         for ins in res["Instances"]:
